@@ -5,6 +5,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.distributed.parallel_loader as pl
+import torch_xla.distributed.xla_multiprocessing as xmp
 
 from model.gpt import GPT, GPTConfig
 from data.loader import DataLoader
@@ -13,47 +14,35 @@ from tokenizer import encode
 import os
 
 
-# ---- LR Scheduler (same as CPU/GPU version) ----
-def get_lr(step, warmup_steps, max_steps, base_lr, min_lr=1e-5):
-    if step < warmup_steps:
-        return base_lr * (step / warmup_steps)
+def train_loop(index):
 
-    progress = (step - warmup_steps) / (max_steps - warmup_steps)
-    progress = min(max(progress, 0.0), 1.0)
-    cosine = 0.5 * (1 + torch.cos(torch.tensor(progress * 3.1415926535)))
-    return min_lr + (base_lr - min_lr) * cosine
-
-
-def train_tpu():
-
-    # ---- TPU device ----
     device = xm.xla_device()
-    xm.master_print(f"Using TPU device: {device}")
+    xm.master_print(f"Core {index} using device: {device}")
 
-    # ---- Hyperparameters ----
-    batch_size = 32       # TPU can handle this
+    # Hyperparameters
+    batch_size = 32    # effective batch = 32 * 8 cores = 256
     seq_len = 128
     base_lr = 3e-4
-    max_iters = 20000     # TPU can easily run this
-    warmup_steps = 400
-    eval_interval = 500
+    max_steps = 20000
 
-    # ---- Load dataset ----
-    with open("data/shakespeare.txt", "r", encoding="utf-8") as f:
+    # Load dataset (only once on CPU)
+    if index == 0:
+        xm.master_print("Loading dataset...")
+    with open("data/shakespeare.txt", "r") as f:
         text = f.read()
     tokens = encode(text)
 
-    split_idx = int(0.9 * len(tokens))
-    train_tokens = tokens[:split_idx]
-    val_tokens = tokens[split_idx:]
+    split = int(0.9 * len(tokens))
+    train_tokens = tokens[:split]
+    val_tokens = tokens[split:]
 
     train_loader = DataLoader(train_tokens, batch_size, seq_len)
     val_loader = DataLoader(val_tokens, batch_size, seq_len)
 
-    # ---- Model config ----
+    # Model
     config = GPTConfig(
         vocab_size=50257,
-        n_embd=256,     # larger model for TPU
+        n_embd=256,
         n_head=8,
         n_layer=8,
         seq_len=seq_len,
@@ -65,25 +54,14 @@ def train_tpu():
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=base_lr)
 
-    writer = SummaryWriter("/content/logs/mini_gpt_tpu")
+    # Make dataloader parallel across TPU cores
+    train_pl = pl.MpDeviceLoader(train_loader, device)
+    val_pl = pl.MpDeviceLoader(val_loader, device)
 
-    xm.master_print("Starting TPU training...")
+    steps = 0
 
-    # ---- Main training loop ----
-    for step in range(max_iters):
-
-        # Compute LR
-        lr = get_lr(
-            step,
-            warmup_steps,
-            max_iters,
-            base_lr,
-            min_lr=1e-5
-        )
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
-
-        xb, yb = train_loader.get_batch("train")
+    for batch in train_pl:
+        xb, yb = batch
         xb = xb.to(device)
         yb = yb.to(device)
 
@@ -91,34 +69,25 @@ def train_tpu():
 
         optimizer.zero_grad()
         loss.backward()
-
-        # TPU-safe optimizer step
         xm.optimizer_step(optimizer)
 
-        # Logging (only master core prints)
-        if step % 50 == 0:
-            xm.master_print(f"Step {step} | Loss: {loss.item():.4f} | LR: {lr:.6f}")
-            writer.add_scalar("loss/train", loss.item(), step)
-            writer.add_scalar("lr", lr, step)
+        if index == 0 and steps % 50 == 0:
+            xm.master_print(f"Step {steps} | Loss {loss.item():.4f}")
 
-        # Evaluate
-        if step % eval_interval == 0 and step > 0:
-            with torch.no_grad():
-                xb, yb = val_loader.get_batch("val")
-                xb = xb.to(device)
-                yb = yb.to(device)
-                _, val_loss = model(xb, yb)
-                xm.master_print(f"VAL LOSS: {val_loss.item():.4f}")
-                writer.add_scalar("loss/val", val_loss.item(), step)
+        if steps >= max_steps:
+            break
 
-        # Save model
-        if step % 2000 == 0 and step > 0:
-            xm.master_print("Saving TPU checkpoint...")
-            xm.save(model.state_dict(), "mini_gpt_tpu.pt")
+        steps += 1
 
-    xm.master_print("Training complete!")
-    xm.save(model.state_dict(), "mini_gpt_tpu.pt")
+    if index == 0:
+        xm.master_print("Saving checkpoint...")
+        xm.save(model.state_dict(), "mini_gpt_parallel.pt")
+
+
+def main():
+    # Launch on 8 TPU cores
+    xmp.spawn(train_loop, nprocs=8)
 
 
 if __name__ == "__main__":
-    train_tpu()
+    main()
