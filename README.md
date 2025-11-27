@@ -1,88 +1,73 @@
-# ScratchGPT
-This project was built to understand how GPT-2 works internally by implementing it from scratch. These are the key concepts learned:
+A minimal GPT-2 (124M) implementation built from scratch in PyTorch.
 
-🔤 Tokenization (GPT-2 BPE)
+ScratchGPT is an educational implementation of GPT-2, focused on understanding transformers end-to-end: tokenization, attention, transformer blocks, training loops, and autoregressive generation.
+The codebase is lightweight, readable, and easy to extend.
 
-Text is converted to subword tokens using Byte Pair Encoding.
+📦 Features
 
-Token IDs → embeddings → model.
+GPT-2 Small architecture (124M params)
 
-Outputs are token IDs converted back to text.
+GPT-2 BPE tokenization (tiktoken)
 
-🎯 Next-Token Prediction (x vs y)
+Multi-head self-attention
 
-Input sequence x.
+Causal masking
 
-Target sequence y = x shifted by 1.
+Transformer blocks (MHSA + MLP + residuals + LayerNorm)
 
-Model learns: predict the next token at every step.
+AdamW optimizer with warmup + cosine decay
 
-🔢 Embeddings
+Dataloaders for packed sequences
 
-Token embeddings + positional embeddings.
+Text generation (temperature, top-k, top-p)
 
-Combine to form the input to the transformer.
+TPU v5e support (XLA multi-core training)
 
-🧠 Self-Attention
+📁 Project Structure
+ScratchGPT/
+  model/
+    gpt.py
+    block.py
+    attention.py
+  data/
+    loader.py
+    shakespeare.txt
+  tokenizer.py
+  config.py
+  scripts/
+    train_gpu.py
+    train_tpu_v5e.py
+    generate.py
 
-Compute Q, K, V from embeddings.
+🔧 Training
+GPU
+pip install -r requirements.txt
+python -m scripts.train_gpu
 
-Attention scores = Q · Kᵀ / sqrt(d).
+TPU (v5e)
+python -m scripts.train_tpu_v5e
 
-Softmax → weights → weighted sum of V.
+✨ Generate Text
+python -m scripts.generate --checkpoint checkpoints/gpt2_124m.pt
 
-Allows model to focus on relevant previous tokens.
+📘 Concepts Learned
 
-🧩 Multi-Head Attention
+GPT-2 BPE tokenization
 
-Several attention heads in parallel.
+Shifted (x, y) next-token prediction
 
-Concatenate head outputs → linear projection.
+Embeddings + positional encodings
 
-Helps model learn different relationships at once.
+Q/K/V projections and attention scores
 
-🏗 Transformer Block
+Multi-head attention + concatenation
 
-Multi-head attention
+Feed-forward MLP layers
 
-Feed-forward network (MLP)
+Residual connections + LayerNorm
 
-Residual connections
+Causal masking
 
-LayerNorm
+Training loop construction
 
-Stacked to build the full model.
-
-🔥 Causal Masking
-
-Ensures each token can only attend to previous tokens.
-
-Enforces autoregressive generation.
-
-🎛 Optimization
-
-AdamW optimizer
-
-Warmup + cosine LR decay
-
-Gradient clipping
-
-Cross entropy loss on logits vs targets
-
-⚡ Training Pipeline
-
-Batch and sequence length configuration
-
-Dataloader producing (x, y) pairs
-
-Forward → loss → backward → optimizer step
-
-Periodic evaluation and checkpointing
-
-🤖 Text Generation
-
-Autoregressive sampling loop
-
-Temperature, top-k, top-p sampling
-
-Using the trained model to produce text token-by-token
+Sampling for text generation
