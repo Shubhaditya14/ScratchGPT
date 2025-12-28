@@ -3,7 +3,7 @@ A minimal GPT-2 (124M) implementation built from scratch in PyTorch.
 ScratchGPT is an educational implementation of GPT-2, focused on understanding transformers end-to-end: tokenization, attention, transformer blocks, training loops, and autoregressive generation.
 The codebase is lightweight, readable, and easy to extend.
 
-📦 Features
+Features
 
 GPT-2 Small architecture (124M params)
 
@@ -23,7 +23,7 @@ Text generation (temperature, top-k, top-p)
 
 TPU v5e support (XLA multi-core training)
 
-📁 Project Structure
+Project Structure
 ScratchGPT/
   model/
     gpt.py
@@ -39,7 +39,7 @@ ScratchGPT/
     train_tpu_v5e.py
     generate.py
 
-🔧 Training
+Training
 GPU
 pip install -r requirements.txt
 python -m scripts.train_gpu
@@ -47,10 +47,10 @@ python -m scripts.train_gpu
 TPU (v5e)
 python -m scripts.train_tpu_v5e
 
-✨ Generate Text
+Generate Text
 python -m scripts.generate --checkpoint checkpoints/gpt2_124m.pt
 
-📘 Concepts Learned
+Concepts Learned
 
 GPT-2 BPE tokenization
 
