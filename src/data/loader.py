@@ -1,5 +1,7 @@
-import torch
 import random
+
+import torch
+
 
 class DataLoader:
     def __init__(self, tokens: list[int], batch_size: int, seq_len: int):

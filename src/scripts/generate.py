@@ -1,8 +1,8 @@
 import torch
 import torch.nn.functional as F
 
-from model.gpt import GPT, GPTConfig
-from tokenizer import encode, decode
+from src.models.gpt import GPT, GPTConfig
+from src.tokenizer import encode, decode
 
 
 # -----------------------------------------------------
@@ -18,27 +18,39 @@ def top_k_logits(logits, k):
 # -----------------------------------------------------
 # Generate function
 # -----------------------------------------------------
-def generate(model, idx, max_new_tokens, temperature=1.0, top_k=None):
+def generate(model, idx, max_new_tokens, temperature=0.8, top_k=40):
+    """
+    Generate tokens from prompt.
+
+    Args:
+        model: GPT model
+        idx: (B, T) input token indices
+        max_new_tokens: number of tokens to generate
+        temperature: 0.8 is sweet spot (higher=more random, <1=more deterministic)
+        top_k: only sample from top-k most likely tokens (40 is typical)
+    """
     model.eval()
 
     for _ in range(max_new_tokens):
-
         # idx: (B, T)
-        idx_cond = idx[:, -model.config.seq_len:]
+        idx_cond = idx[:, -model.config.seq_len :]
 
-        # forward
-        logits = model(idx_cond)
+        # forward pass
+        logits = model(idx_cond)  # (B, T, vocab_size)
 
-        # take final token's logits
-        logits = logits[:, -1, :] / temperature
+        # take final token's logits and apply temperature
+        logits = logits[:, -1, :] / max(temperature, 1e-8)
 
-        # top-k
+        # top-k filtering (remove low probability tokens)
         if top_k is not None:
-            logits = top_k_logits(logits, top_k)
+            # Make sure top_k doesn't exceed vocab size
+            k = min(top_k, logits.size(-1))
+            logits = top_k_logits(logits, k)
 
+        # convert to probabilities
         probs = F.softmax(logits, dim=-1)
 
-        # sample
+        # sample from distribution
         next_id = torch.multinomial(probs, num_samples=1)
 
         idx = torch.cat((idx, next_id), dim=1)
@@ -50,20 +62,16 @@ def generate(model, idx, max_new_tokens, temperature=1.0, top_k=None):
 # Main
 # -----------------------------------------------------
 def main():
-
-    device = "mps" if torch.backends.mps.is_available() else (
-        "cuda" if torch.cuda.is_available() else "cpu"
+    device = (
+        "mps"
+        if torch.backends.mps.is_available()
+        else ("cuda" if torch.cuda.is_available() else "cpu")
     )
     print("Using device:", device)
 
     # Same config as training
     config = GPTConfig(
-        vocab_size=50257,
-        n_embd=128,
-        n_head=4,
-        n_layer=4,
-        seq_len=128,
-        dropout=0.0
+        vocab_size=50257, n_embd=128, n_head=4, n_layer=4, seq_len=128, dropout=0.0
     )
 
     model = GPT(config)
@@ -82,13 +90,7 @@ def main():
     idx = torch.tensor([encode(prompt)], dtype=torch.long).to(device)
 
     # GENERATE TOKENS
-    out = generate(
-        model,
-        idx,
-        max_new_tokens=200,
-        temperature=1.0,
-        top_k=50
-    )
+    out = generate(model, idx, max_new_tokens=200, temperature=0.8, top_k=40)
 
     # DECODE TO TEXT
     text = decode(out[0].tolist())
