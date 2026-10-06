@@ -1,7 +1,7 @@
 import torch
-from model.gpt import GPT, GPTConfig
-from data.loader import DataLoader
-from tokenizer import encode
+from src.models.gpt import GPT, GPTConfig
+from src.data.loader import DataLoader
+from src.tokenizer import encode
 
 
 def load_dataset(path):
@@ -14,14 +14,15 @@ def tokenize_text(text):
 
 
 def main():
-
-    device = "mps" if torch.backends.mps.is_available() else (
-        "cuda" if torch.cuda.is_available() else "cpu"
+    device = (
+        "mps"
+        if torch.backends.mps.is_available()
+        else ("cuda" if torch.cuda.is_available() else "cpu")
     )
     print("Using device:", device)
 
     # ---- Load dataset ----
-    text = load_dataset("data/shakespeare.txt")
+    text = load_dataset("src/data/shakespeare.txt")
     tokens = tokenize_text(text)
 
     # val = last 10%
@@ -32,12 +33,7 @@ def main():
 
     # ---- Load model ----
     config = GPTConfig(
-        vocab_size=50257,
-        n_embd=128,
-        n_head=4,
-        n_layer=4,
-        seq_len=128,
-        dropout=0.0
+        vocab_size=50257, n_embd=128, n_head=4, n_layer=4, seq_len=128, dropout=0.0
     )
 
     model = GPT(config).to(device)

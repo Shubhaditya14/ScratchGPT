@@ -7,9 +7,9 @@ import os
 import time
 
 # IMPORTS FOR YOUR PROJECT STRUCTURE
-from model.gpt import GPT, GPTConfig
-from data.loader import DataLoader
-from tokenizer import encode
+from src.models.gpt import GPT, GPTConfig
+from src.data.loader import DataLoader
+from src.tokenizer import encode
 
 
 # LR scheduler with warmup + cosine decay
@@ -49,7 +49,6 @@ def tokenize_text(text):
 # 3. Training script
 # -----------------------------------------------------
 def train():
-
     # Hyperparameters
     batch_size = 8
     seq_len = 128
@@ -64,7 +63,7 @@ def train():
     # -------------------------------------------------
     # Load data
     # -------------------------------------------------
-    text = load_dataset("data/shakespeare.txt")
+    text = load_dataset("src/data/shakespeare.txt")
     tokens = tokenize_text(text)
 
     # Split dataset (90% train, 10% val)
@@ -82,12 +81,7 @@ def train():
     # Create model
     # -------------------------------------------------
     config = GPTConfig(
-        vocab_size=50257,
-        n_embd=128,
-        n_head=4,
-        n_layer=4,
-        seq_len=seq_len,
-        dropout=0.0
+        vocab_size=50257, n_embd=128, n_head=4, n_layer=4, seq_len=seq_len, dropout=0.0
     )
 
     model = GPT(config).to(device)
@@ -103,7 +97,6 @@ def train():
     # Training loop
     # -------------------------------------------------
     for step in range(max_iters):
-
         # Update LR
         lr = get_lr(step, warmup_steps, max_iters, base_lr, min_lr=1e-5)
         for param_group in optimizer.param_groups:
